@@ -1,496 +1,30 @@
-import 'dart:convert';
-import 'dart:developer';
-
+// views/home_page.dart
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:moneyger_3_24/models/transaction.dart';
-import 'package:moneyger_3_24/utils/constants.dart';
+import 'package:get/get.dart';
+import 'package:moneyger_3_24/controllers/home_controller.dart';
+import 'package:moneyger_3_24/widgets/add_transaction_dialog.dart';
 
-class HomePage extends StatefulWidget {
+class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  double balance = 0.0;
-  List<Transaction> transactions = [];
-  bool isLoading = true;
-  String errorMessage = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    setState(() {
-      isLoading = true;
-      errorMessage = '';
-    });
-
-    try {
-      await Future.wait([
-        _loadBalance(),
-        _loadTransactions(),
-      ]);
-    } catch (e) {
-      setState(() {
-        errorMessage = 'Failed to load data: $e';
-      });
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _loadBalance() async {
-    try {
-      final response = await http.get(
-        Uri.parse('${AppUrls.gasUrl}?action=getBalance'),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success']) {
-          setState(() {
-            balance = (data['balance'] ?? 0).toDouble();
-          });
-        } else {
-          throw Exception(data['error'] ?? 'Failed to load balance');
-        }
-      } else {
-        throw Exception('Server error: ${response.statusCode}');
-      }
-    } catch (e) {
-      log('Error loading balance: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _loadTransactions() async {
-    try {
-      final response = await http.get(
-        Uri.parse('${AppUrls.gasUrl}?action=getTransactions'),
-        headers: {'Content-Type': 'application/json'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success']) {
-          setState(() {
-            transactions = (data['transactions'] as List).map((item) => Transaction.fromJson(item)).toList();
-          });
-        } else {
-          throw Exception(data['error'] ?? 'Failed to load transactions');
-        }
-      } else {
-        throw Exception('Server error: ${response.statusCode}');
-      }
-    } catch (e) {
-      log('Error loading transactions: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> _addTransaction({
-    required String title,
-    required String subtitle,
-    required double amount,
-    required bool isPositive,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse(AppUrls.gasUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'action': 'addTransaction',
-          'title': title,
-          'subtitle': subtitle,
-          'amount': amount.toString(),
-          'isPositive': isPositive,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success']) {
-          // Reload data after successful addition
-          await _loadData();
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(data['message'] ?? 'Transaction added successfully'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-        } else {
-          throw Exception(data['error'] ?? 'Failed to add transaction');
-        }
-      } else {
-        throw Exception('Server error: ${response.statusCode}');
-      }
-    } catch (e) {
-      log('Error adding transaction: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to add transaction: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  List<Map<String, String>> _getPresetButtons(bool isIncome) {
-    if (isIncome) {
-      return [
-        {'title': 'Salary', 'subtitle': 'Monthly salary'},
-        {'title': 'Freelance', 'subtitle': 'Freelance project'},
-        {'title': 'Bonus', 'subtitle': 'Performance bonus'},
-        {'title': 'Investment', 'subtitle': 'Investment return'},
-        {'title': 'Gift', 'subtitle': 'Money gift'},
-      ];
-    } else {
-      return [
-        {'title': 'Food', 'subtitle': 'Meals and snacks'},
-        {'title': 'Transportation', 'subtitle': 'Travel expenses'},
-        {'title': 'Shopping', 'subtitle': 'Shopping expenses'},
-        {'title': 'Bills', 'subtitle': 'Utility bills'},
-        {'title': 'Entertainment', 'subtitle': 'Movies, games, etc'},
-      ];
-    }
-  }
-
-  void _showAddTransactionDialog(bool isIncome) {
-    final titleController = TextEditingController();
-    final subtitleController = TextEditingController();
-    final amountController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            color: Colors.white,
-          ),
-          child: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header with icon and title
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isIncome ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        isIncome ? Icons.add_circle_outline : Icons.remove_circle_outline,
-                        color: isIncome ? Colors.green[600] : Colors.red[600],
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Add ${isIncome ? 'Income' : 'Expense'}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          isIncome ? 'Record money you received' : 'Record money you spent',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Transaction Type Indicator
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isIncome ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isIncome ? Colors.green[200]! : Colors.red[200]!,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isIncome ? Icons.trending_up : Icons.trending_down,
-                        size: 16,
-                        color: isIncome ? Colors.green[600] : Colors.red[600],
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Type: ${isIncome ? 'Income (+)' : 'Expense (-)'}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isIncome ? Colors.green[700] : Colors.red[700],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // Quick Preset Buttons
-                Text(
-                  'Quick Select:',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[700],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _getPresetButtons(isIncome)
-                      .map(
-                        (preset) => InkWell(
-                          onTap: () {
-                            titleController.text = preset['title']!;
-                            subtitleController.text = preset['subtitle']!;
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Text(
-                              preset['title']!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[700],
-                              ),
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Form Fields
-                TextFormField(
-                  controller: titleController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: InputDecoration(
-                    labelText: 'Title *',
-                    hintText: isIncome ? 'e.g., Salary, Freelance, Bonus' : 'e.g., Groceries, Transportation, Bills',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    prefixIcon: Icon(
-                      isIncome ? Icons.work_outline : Icons.shopping_cart_outlined,
-                      color: isIncome ? Colors.green[600] : Colors.red[600],
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter a title';
-                    }
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: 16),
-
-                TextFormField(
-                  controller: subtitleController,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    labelText: 'Description',
-                    hintText: isIncome ? 'e.g., Monthly salary from company' : 'e.g., Weekly grocery shopping',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    prefixIcon: Icon(
-                      Icons.description_outlined,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                TextFormField(
-                  controller: amountController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Amount *',
-                    hintText: '0',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    prefixIcon: Container(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        'Rp',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                    ),
-                    suffixIcon: Icon(
-                      Icons.attach_money,
-                      color: isIncome ? Colors.green[600] : Colors.red[600],
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter an amount';
-                    }
-                    final amount = double.tryParse(value.trim());
-                    if (amount == null || amount <= 0) {
-                      return 'Please enter a valid amount';
-                    }
-                    return null;
-                  },
-                ),
-
-                const SizedBox(height: 24),
-
-                // Action Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (formKey.currentState!.validate()) {
-                            final amount = double.parse(amountController.text.trim());
-                            _addTransaction(
-                              title: titleController.text.trim(),
-                              subtitle: subtitleController.text.trim(),
-                              amount: amount,
-                              isPositive: isIncome, // This determines if it's income (true) or expense (false)
-                            );
-                            Navigator.pop(context);
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isIncome ? Colors.green[600] : Colors.red[600],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 2,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              isIncome ? Icons.add : Icons.remove,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Add ${isIncome ? 'Income' : 'Expense'}',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Info text
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(
-                    '* Required fields',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[500],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
+    // Initialize controller
+    final HomeController controller = Get.put(HomeController());
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
+      // Tambahkan resizeToAvoidBottomInset untuk menghindari konflik keyboard
+      resizeToAvoidBottomInset: true,
       body: RefreshIndicator(
-        onRefresh: _loadData,
+        onRefresh: controller.loadData,
         child: Column(
           children: [
-            _buildBalanceSection(context),
+            _buildBalanceSection(context, controller),
             const SizedBox(height: 100),
             _buildRecentTransactionsHeader(),
             Expanded(
-              child: _buildTransactionsList(),
+              child: _buildTransactionsList(controller),
             ),
           ],
         ),
@@ -498,9 +32,9 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildBalanceSection(BuildContext context) {
+  Widget _buildBalanceSection(BuildContext context, HomeController controller) {
     return Stack(
-      clipBehavior: Clip.none, // Allow overflow
+      clipBehavior: Clip.none,
       children: [
         Container(
           width: double.infinity,
@@ -526,46 +60,51 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                if (isLoading)
-                  const CircularProgressIndicator(color: Colors.white)
-                else
-                  Text(
-                    'Rp ${balance.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+                Obx(() {
+                  if (controller.isLoading) {
+                    return const CircularProgressIndicator(color: Colors.white);
+                  }
+                  return Text(
+                    controller.formatCurrency(controller.balance),
                     style: const TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                       letterSpacing: 1.2,
                     ),
-                  ),
-                if (errorMessage.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      errorMessage,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
+                  );
+                }),
+                Obx(() {
+                  if (controller.errorMessage.isNotEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        controller.errorMessage,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                }),
               ],
             ),
           ),
         ),
-        // Position action buttons at the bottom with proper offset
         Positioned(
           left: 0,
           right: 0,
-          bottom: -90, // Negative value to position outside the container
-          child: _buildActionButtons(),
+          bottom: -90,
+          child: _buildActionButtons(controller),
         ),
       ],
     );
   }
 
-  Widget _buildActionButtons() {
+  Widget _buildActionButtons(HomeController controller) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
@@ -600,11 +139,7 @@ class _HomePageState extends State<HomePage> {
             icon: Icons.bar_chart_rounded,
             label: 'Report',
             color: Colors.blue,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Report feature coming soon!')),
-              );
-            },
+            onTap: controller.showReportComingSoon,
           ),
         ],
       ),
@@ -623,6 +158,9 @@ class _HomePageState extends State<HomePage> {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
+          // Tambahkan splashColor dan highlightColor untuk menghindari conflict
+          splashColor: color.withOpacity(0.1),
+          highlightColor: color.withOpacity(0.05),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
@@ -681,7 +219,15 @@ class _HomePageState extends State<HomePage> {
           ),
           GestureDetector(
             onTap: () {
-              log('View All tapped');
+              // Navigate to all transactions page
+              Get.snackbar(
+                'Info',
+                'All transactions page coming soon!',
+                backgroundColor: Colors.blue,
+                colorText: Colors.white,
+                snackPosition: SnackPosition.BOTTOM,
+                margin: const EdgeInsets.all(16),
+              );
             },
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -707,62 +253,68 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildTransactionsList() {
-    if (isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (transactions.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.receipt_long,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No transactions yet',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Add your first transaction using the buttons above',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[500],
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      itemCount: transactions.length,
-      itemBuilder: (context, index) {
-        final transaction = transactions[index];
-        return _buildTransactionItem(
-          title: transaction.title,
-          subtitle: transaction.subtitle,
-          amount: transaction.amount,
-          isPositive: transaction.isPositive,
-          isLast: index == transactions.length - 1,
+  Widget _buildTransactionsList(HomeController controller) {
+    return Obx(() {
+      if (controller.isLoading) {
+        return const Center(
+          child: CircularProgressIndicator(),
         );
-      },
-    );
+      }
+
+      if (controller.transactions.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.receipt_long,
+                size: 64,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No transactions yet',
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Add your first transaction using the buttons above',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[500],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        );
+      }
+
+      return ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        itemCount: controller.transactions.length,
+        // Tambahkan keyboardDismissBehavior untuk menghindari conflict
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        itemBuilder: (context, index) {
+          final transaction = controller.transactions[index];
+          return _buildTransactionItem(
+            controller: controller,
+            title: transaction.title,
+            subtitle: transaction.subtitle,
+            amount: transaction.amount,
+            isPositive: transaction.isPositive,
+            isLast: index == controller.transactions.length - 1,
+          );
+        },
+      );
+    });
   }
 
   Widget _buildTransactionItem({
+    required HomeController controller,
     required String title,
     required String subtitle,
     required double amount,
@@ -823,7 +375,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           Text(
-            '${isPositive ? '+' : '-'}Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}',
+            '${isPositive ? '+' : '-'}${controller.formatCurrency(amount)}',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -833,5 +385,20 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  void _showAddTransactionDialog(bool isIncome) {
+    // Pastikan tidak ada focus yang tersisa sebelum membuka dialog
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    // Tambahkan delay kecil untuk memastikan keyboard sudah hilang
+    Future.delayed(const Duration(milliseconds: 100), () {
+      Get.dialog(
+        AddTransactionDialog(isIncome: isIncome),
+        barrierDismissible: false,
+        // Tambahkan parameter untuk menghindari auto focus issue
+        useSafeArea: true,
+      );
+    });
   }
 }

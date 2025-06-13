@@ -3,23 +3,33 @@ class Transaction {
   final String subtitle;
   final double amount;
   final bool isPositive;
-  final String date;
+  final DateTime createdAt;
 
   Transaction({
     required this.title,
     required this.subtitle,
     required this.amount,
     required this.isPositive,
-    required this.date,
+    required this.createdAt,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     return Transaction(
-      title: json['title'] ?? '',
-      subtitle: json['subtitle'] ?? '',
+      title: json['title']?.toString() ?? '',
+      subtitle: json['subtitle']?.toString() ?? '',
       amount: (json['amount'] ?? 0).toDouble(),
       isPositive: json['isPositive'] ?? false,
-      date: json['date'] ?? '',
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : DateTime.now(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'subtitle': subtitle,
+      'amount': amount,
+      'isPositive': isPositive,
+      'createdAt': createdAt.toIso8601String(),
+    };
   }
 }
